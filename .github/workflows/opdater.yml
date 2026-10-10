@@ -1,0 +1,56 @@
+name: Opdater siden
+
+on:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: bash update.sh
+      - name: Gem opdateret holdliste
+        run: |
+          if ! cmp -s known_teams.json known_teams.new.json; then
+            cp known_teams.new.json known_teams.json
+            git config user.name "github-actions"
+            git config user.email "actions@users.noreply.github.com"
+            git add known_teams.json
+            git commit -m "Opdater holdliste" && git push || true
+          fi
+      - name: Hold den ugentlige kørsel aktiv
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/opdater.yml/enable" || true
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
