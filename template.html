@@ -1,0 +1,931 @@
+<title>Elo Head-to-Head</title>
+<style>
+/* Layout: one working page. Controls on top, a face-off header with Elo, then comparison + fair-odds side by side, Elo history below, form and head-to-head last. */
+:root {
+  --bg: #f4f4f1;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink2: #52514e;
+  --muted: #706e69;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --line: rgba(11,11,11,0.12);
+  --wash: #efeeea;
+  --a: #2a78d6;
+  --b: #eb6834;
+  --good: #006300;
+  --bad: #b02a2a;
+  --warnbg: #fdf1d6;
+  --warnink: #6b4a00;
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-num: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #a09e97;
+    --grid: #2c2c2a; --axis: #383835; --line: rgba(255,255,255,0.12); --wash: #242423;
+    --a: #3987e5; --b: #d95926; --good: #3fbf3f; --bad: #ee7c7c; --warnbg: #3a2f10; --warnink: #f3d78a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #a09e97;
+  --grid: #2c2c2a; --axis: #383835; --line: rgba(255,255,255,0.12); --wash: #242423;
+  --a: #3987e5; --b: #d95926; --good: #3fbf3f; --bad: #ee7c7c; --warnbg: #3a2f10; --warnink: #f3d78a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.45; padding-inline: 16px; padding-block: 20px 56px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.02rem; font-weight: 650; }
+.sub { color: var(--ink2); margin: 4px 0 0; max-width: 62ch; }
+.top { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; align-items: flex-end; }
+.fresh { font-family: var(--font-num); font-size: 0.78rem; color: var(--ink2); background: var(--wash); border-radius: 6px; padding: 6px 10px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.card > h2 { margin-bottom: 12px; }
+
+/* controls */
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; align-items: end; }
+.teams-pick { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: end; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field > label, .legend-l { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink2); font-weight: 600; }
+select, input[type=text], input[type=number] { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--axis); border-radius: 7px; padding: 9px 10px; width: 100%; min-width: 0; }
+select:focus-visible, input:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.pair { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 8px; min-width: 0; }
+.pickA #selA { border-left: 5px solid var(--a); }
+.pickB #selB { border-left: 5px solid var(--b); }
+.swap { font: inherit; background: var(--wash); color: var(--ink); border: 1px solid var(--axis); border-radius: 7px; padding: 9px 12px; cursor: pointer; }
+.seg { display: inline-flex; border: 1px solid var(--axis); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.field .seg { width: 100%; }
+.seg button { min-width: 0; font: inherit; font-size: 0.9rem; background: transparent; color: var(--ink); border: 0; padding: 9px 13px; cursor: pointer; flex: 1; white-space: nowrap; }
+.seg button + button { border-left: 1px solid var(--axis); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); font-weight: 600; }
+
+/* face-off */
+.faceoff { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: stretch; }
+.team { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; display: flex; flex-direction: column; gap: 6px; border-top-width: 5px; }
+.team.a { border-top-color: var(--a); }
+.team.b { border-top-color: var(--b); text-align: right; }
+.team .nm { font-size: 1.25rem; font-weight: 700; overflow-wrap: anywhere; }
+.team .lg { color: var(--ink2); font-size: 0.85rem; }
+.team .elo { font-family: var(--font-num); font-size: 2.1rem; font-weight: 600; line-height: 1.05; }
+.team .rk { font-family: var(--font-num); font-size: 0.78rem; color: var(--ink2); }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.team.b .badges { justify-content: flex-end; }
+.badge { font-size: 0.74rem; background: var(--warnbg); color: var(--warnink); border-radius: 5px; padding: 3px 7px; }
+.vs { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-family: var(--font-num); text-align: center; padding-inline: 4px; }
+.vs .d { font-size: 1.15rem; font-weight: 600; }
+.vs .t { font-size: 0.72rem; color: var(--ink2); max-width: 11ch; }
+
+/* layout */
+.main { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+
+/* comparison rows */
+.cmp { display: flex; flex-direction: column; }
+.row { display: grid; grid-template-columns: 4.6rem 1fr 1fr 4.6rem; column-gap: 4px; padding-block: 8px; border-top: 1px solid var(--grid); align-items: center; }
+.row:first-child { border-top: 0; }
+.rlabel { grid-column: 1 / -1; text-align: center; font-size: 0.8rem; color: var(--ink2); margin-bottom: 4px; }
+.rlabel small { color: var(--muted); font-size: 0.72rem; }
+.num { font-family: var(--font-num); font-size: 0.95rem; }
+.num.l { text-align: left; } .num.r { text-align: right; }
+.num.lead { font-weight: 700; }
+.num.lead::before { content: "\25CF\00a0"; font-size: 0.6em; vertical-align: middle; }
+.num.r.lead::before { content: ""; }
+.num.r.lead::after { content: "\00a0\25CF"; font-size: 0.6em; vertical-align: middle; }
+.track { height: 10px; background: var(--wash); border-radius: 3px; display: flex; overflow: hidden; }
+.track.ta { justify-content: flex-end; }
+.track i { display: block; height: 100%; }
+.track.ta i { background: var(--a); border-radius: 4px 0 0 4px; }
+.track.tb i { background: var(--b); border-radius: 0 4px 4px 0; }
+.row .dim { opacity: 0.55; }
+.row.text .mid { grid-column: 2 / 4; text-align: center; font-family: var(--font-num); font-size: 0.8rem; color: var(--ink2); }
+.note { color: var(--ink2); font-size: 0.82rem; margin: 10px 0 0; }
+
+/* odds */
+.venue .seg { flex-direction: column; width: 100%; }
+.venue .seg button { text-align: left; white-space: normal; padding: 8px 12px; }
+.venue .seg button + button { border-left: 0; border-top: 1px solid var(--axis); }
+.venue { margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
+.xg { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.xg div { background: var(--wash); border-radius: 8px; padding: 8px 12px; font-size: 0.78rem; color: var(--ink2); flex: 1; min-width: 7rem; }
+.xg b { display: block; font-family: var(--font-num); font-size: 1.2rem; color: var(--ink); font-weight: 600; }
+.xg .sa { border-left: 4px solid var(--a); } .xg .sb { border-left: 4px solid var(--b); }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+th { text-align: right; font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink2); font-weight: 600; padding: 6px 6px; border-bottom: 1px solid var(--axis); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+td { padding: 7px 6px; border-bottom: 1px solid var(--grid); text-align: right; font-family: var(--font-num); white-space: nowrap; }
+td:first-child { font-family: var(--font-ui); white-space: normal; min-width: 6.5rem; }
+td input { width: 4.6rem; padding: 6px 7px; font-family: var(--font-num); text-align: right; }
+.grp td { font-family: var(--font-ui); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink2); background: var(--wash); border-bottom: 0; }
+.ev { font-size: 0.82rem; }
+.ev.pos { color: var(--good); font-weight: 600; }
+.ev.neg { color: var(--bad); }
+.scores { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.chip { font-family: var(--font-num); font-size: 0.8rem; background: var(--wash); border-radius: 6px; padding: 4px 8px; }
+.margin { margin: 10px 0 0; font-size: 0.82rem; color: var(--ink2); font-family: var(--font-num); }
+
+/* chart */
+.chartbox { position: relative; }
+svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { font-family: var(--font-num); font-size: 11px; fill: var(--ink2); }
+.chart .endl { font-weight: 600; fill: var(--ink); }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--axis); border-radius: 8px; padding: 7px 10px; font-size: 0.78rem; font-family: var(--font-num); box-shadow: 0 2px 8px rgba(0,0,0,0.12); white-space: nowrap; z-index: 2; }
+.tip .k { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; font-size: 0.85rem; }
+.legend span::before { content: ""; display: inline-block; width: 18px; height: 3px; border-radius: 2px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+
+/* form + h2h */
+.formrow { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.formrow .who { font-size: 0.85rem; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.formrow .who::before { content: ""; width: 10px; height: 10px; border-radius: 2px; background: var(--c); }
+.chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.fc { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; font-family: var(--font-num); font-size: 0.78rem; font-weight: 600; cursor: default; border: 1px solid var(--axis); }
+.fc.W { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.fc.D { background: var(--wash); color: var(--ink); }
+.fc.L { background: transparent; color: var(--ink2); border-style: dashed; }
+.h2h-sum { font-family: var(--font-num); font-size: 0.88rem; margin-bottom: 10px; }
+.h2h td, .h2h th { font-size: 0.8rem; }
+.h2h td, .h2h th { text-align: left; }
+.h2h td { white-space: normal; }
+.empty { color: var(--ink2); font-size: 0.9rem; }
+details.card summary { cursor: pointer; font-weight: 650; }
+details.card .body { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; max-width: 80ch; color: var(--ink2); font-size: 0.9rem; }
+details.card .body p { margin: 0; }
+.foot { color: var(--muted); font-size: 0.78rem; max-width: 90ch; }
+.foot a { color: inherit; }
+
+@media (max-width: 860px) {
+  .main, .two { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .faceoff { grid-template-columns: minmax(0, 1fr); }
+  .team.b { text-align: left; } .team.b .badges { justify-content: flex-start; }
+  .vs { flex-direction: row; gap: 10px; padding-block: 2px; }
+  .vs .t { max-width: none; }
+  .teams-pick { grid-template-columns: minmax(0, 1fr); }
+  .pair { grid-template-columns: minmax(0, 1fr); }
+  .swap { justify-self: start; }
+  .row { grid-template-columns: 4rem 1fr 1fr 4rem; }
+}
+@media (prefers-reduced-motion: no-preference) { .track i { transition: width .25s ease; } }
+.topright { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.langsel { width: auto; min-width: 8rem; font: inherit; font-size: 0.85rem; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+@media (max-width: 640px) { .topright { align-items: flex-start; } }
+.pred { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 4px 0 12px; background: var(--wash); display: grid; gap: 8px; }
+.pred .pt { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink2); font-weight: 600; }
+.pred .pk { font-size: 1.25rem; font-weight: 700; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.pred .pk .num { font-size: 1.05rem; color: var(--ink2); font-weight: 600; }
+.pred .ps { font-size: 0.88rem; color: var(--ink); }
+.pred .pbar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px; }
+.pred .pbar i { display: block; min-width: 2px; }
+.pred .pleg { display: flex; justify-content: space-between; gap: 8px; font-size: 0.8rem; color: var(--ink2); flex-wrap: wrap; }
+.pred .pn { font-size: 0.78rem; color: var(--ink2); margin: 0; }
+.disc .body p { margin: 0 0 8px; font-size: 0.86rem; color: var(--ink2); }
+.disc .body b { color: var(--ink); }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Elo Head-to-Head</h1>
+      <p class="sub" data-i18n="sub"></p>
+    </div>
+    <div class="topright"><select id="lang" class="langsel" aria-label="Language / Sprog / Idioma / Sprache"><option value="da">Dansk</option><option value="en">English</option><option value="es">Español</option><option value="de">Deutsch</option></select><div class="fresh" id="fresh"></div></div>
+  </header>
+
+  <section class="card" data-i18n-aria="selAria">
+    <div class="controls">
+      <div class="teams-pick">
+        <div class="pair pickA"><div class="field"><label for="lgA" data-i18n="league"></label><select id="lgA"></select></div><div class="field"><label for="selA" data-i18n="teamA"></label><select id="selA"></select></div></div>
+        <button class="swap" id="swap" type="button" data-i18n-aria="swapAria" data-i18n="swap"></button>
+        <div class="pair pickB"><div class="field"><label for="lgB" data-i18n="league"></label><select id="lgB"></select></div><div class="field"><label for="selB" data-i18n="teamB"></label><select id="selB"></select></div></div>
+      </div>
+      <div class="field"><span class="legend-l" data-i18n="view"></span>
+        <div class="seg" role="group" data-i18n-aria="view"><button type="button" id="mAdj" aria-pressed="true" data-i18n="adj"></button><button type="button" id="mRaw" aria-pressed="false" data-i18n="raw"></button></div>
+      </div>
+      <div class="field"><label for="win" data-i18n="last"></label>
+        <select id="win"><option value="5">5 kampe</option><option value="10" selected>10 kampe</option><option value="20">20 kampe</option><option value="40">40 kampe</option></select></div>
+      <div class="field"><label for="cmp" data-i18n="comps"></label>
+        <select id="cmp"><option value="all" selected data-i18n="allMatches"></option><option value="league" data-i18n="leagueOnly"></option></select></div>
+    </div>
+  </section>
+
+  <section class="faceoff" id="faceoff" aria-live="polite"></section>
+
+  <div class="main">
+    <section class="card"><h2 id="cmpTitle">Sammenligning</h2><div class="cmp" id="cmpRows"></div><p class="note" id="cmpNote"></p></section>
+    <section class="card"><h2 data-i18n="oddsTitle"></h2>
+      <div class="venue"><span class="legend-l" data-i18n="venueLabel"></span>
+        <div class="seg" role="group" data-i18n-aria="venueLabel"><button type="button" id="vH" aria-pressed="true"></button><button type="button" id="vA" aria-pressed="false"></button><button type="button" id="vN" aria-pressed="false" data-i18n="neutral"></button></div></div>
+      <div class="pred" id="pred"></div>
+      <div class="xg" id="xg"></div>
+      <div class="tbl"><table id="odds"></table></div>
+      <p class="margin" id="margin"></p>
+      <div class="scores" id="scores"></div>
+      <p class="note" id="oddsNote"></p>
+    </section>
+  </div>
+
+  <section class="card"><h2 data-i18n="chartTitle"></h2>
+    <div class="legend" id="legend"></div>
+    <div class="chartbox" id="chartbox"><svg class="chart" id="chart" viewBox="0 0 720 260" role="img" data-i18n-aria="chartAria"></svg><div class="tip" id="tip" hidden></div></div>
+    <details style="margin-top:10px"><summary data-i18n="showNumbers"></summary><div class="tbl" style="margin-top:8px"><table id="eloTbl"></table></div></details>
+  </section>
+
+  <div class="two">
+    <section class="card"><h2 data-i18n="formTitle"></h2><div id="form"></div></section>
+    <section class="card"><h2 data-i18n="h2hTitle"></h2><div id="h2h"></div></section>
+  </div>
+
+  <details class="card"><summary data-i18n="howtoSum"></summary>
+    <div class="body" id="howto"></div>
+  </details>
+  <section class="card disc"><h2 data-i18n="dTitle"></h2><div class="body" id="discBody"></div></section>
+  <p class="foot" data-i18n="foot"></p>
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(function () {
+  "use strict";
+  var D = JSON.parse(document.getElementById("data").textContent);
+  var T = D.teams, MD = D.model;
+  var prof = {};
+  D.prof.forEach(function (p) { prof[p.i] = p; });
+
+  // <model>
+  var MAXG = 10;
+  var FACT = [1];
+  for (var q = 1; q <= MAXG; q++) FACT.push(FACT[q - 1] * q);
+  function tau(x, y, lh, la, rho) {
+    if (x === 0 && y === 0) return 1 - lh * la * rho;
+    if (x === 0 && y === 1) return 1 + lh * rho;
+    if (x === 1 && y === 0) return 1 + la * rho;
+    if (x === 1 && y === 1) return 1 - rho;
+    return 1;
+  }
+  function goalRates(rh, ra, neutral, M) {
+    if (neutral) {
+      var ac = (M.ah + M.aa) / 2, xn = (rh - ra) / 400;
+      return [Math.exp(ac + M.b * xn), Math.exp(ac - M.b * xn)];
+    }
+    var x = (rh - ra + M.hfa) / 400;
+    return [Math.exp(M.ah + M.b * x), Math.exp(M.aa - M.b * x)];
+  }
+  function scoreMatrix(lh, la, rho) {
+    var P = [], s = 0, x, y;
+    for (x = 0; x <= MAXG; x++) {
+      P.push([]);
+      for (y = 0; y <= MAXG; y++) {
+        var v = Math.exp(-lh) * Math.pow(lh, x) / FACT[x] * Math.exp(-la) * Math.pow(la, y) / FACT[y] * tau(x, y, lh, la, rho);
+        P[x].push(v); s += v;
+      }
+    }
+    for (x = 0; x <= MAXG; x++) for (y = 0; y <= MAXG; y++) P[x][y] /= s;
+    return P;
+  }
+  function transpose(P) {
+    var Q = [];
+    for (var y = 0; y <= MAXG; y++) { Q.push([]); for (var x = 0; x <= MAXG; x++) Q[y].push(P[x][y]); }
+    return Q;
+  }
+  // P[a][b] = probability A scores a and B scores b
+  function summarize(P) {
+    var pw = 0, pd = 0, pl = 0, over = 0, bt = 0, all = [];
+    for (var x = 0; x <= MAXG; x++) for (var y = 0; y <= MAXG; y++) {
+      var p = P[x][y];
+      if (x > y) pw += p; else if (x === y) pd += p; else pl += p;
+      if (x + y >= 3) over += p;
+      if (x > 0 && y > 0) bt += p;
+      all.push([x, y, p]);
+    }
+    all.sort(function (u, v) { return v[2] - u[2]; });
+    return { pw: pw, pd: pd, pl: pl, over: over, under: 1 - over, bty: bt, btn: 1 - bt, top: all.slice(0, 6) };
+  }
+  // venue: 'H' team A home, 'A' team B home, 'N' neutral. Returns {la, lb, P (A perspective)}
+  function eloModel(rA, rB, venue) {
+    var lh, la, P;
+    if (venue === "H") { var r1 = goalRates(rA, rB, false, MD); P = scoreMatrix(r1[0], r1[1], MD.rho); return { la: r1[0], lb: r1[1], P: P }; }
+    if (venue === "A") { var r2 = goalRates(rB, rA, false, MD); P = transpose(scoreMatrix(r2[0], r2[1], MD.rho)); return { la: r2[1], lb: r2[0], P: P }; }
+    var r3 = goalRates(rA, rB, true, MD); P = scoreMatrix(r3[0], r3[1], MD.rho);
+    return { la: r3[0], lb: r3[1], P: P };
+  }
+  function expectedPoints(rs, ro, v) {
+    var m = eloModel(rs, ro, v === 1 ? "H" : (v === 0 ? "A" : "N"));
+    var s = summarize(m.P);
+    return 3 * s.pw + s.pd;
+  }
+  function rawModel(sa, sb, venue) {
+    var g = (MD.mu_h + MD.mu_a) / 2, k = 4;
+    function shr(x, n) { return (n * x + k * g) / (n + k); }
+    var attA = shr(sa.gf, sa.n) / g, defA = shr(sa.ga, sa.n) / g, attB = shr(sb.gf, sb.n) / g, defB = shr(sb.ga, sb.n) / g;
+    var la, lb;
+    if (venue === "H") { la = MD.mu_h * attA * defB; lb = MD.mu_a * attB * defA; }
+    else if (venue === "A") { lb = MD.mu_h * attB * defA; la = MD.mu_a * attA * defB; }
+    else { la = g * attA * defB; lb = g * attB * defA; }
+    var P = venue === "A" ? transpose(scoreMatrix(lb, la, MD.rho)) : scoreMatrix(la, lb, MD.rho);
+    return { la: la, lb: lb, P: P };
+  }
+  // </model>
+
+  // ---------- languages
+  var LANGS = ["da", "en", "es", "de"];
+  var LOC = { da: "da-DK", en: "en-GB", es: "es-ES", de: "de-DE" };
+  var MONTHS = {
+    da: ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"],
+    en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    es: ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"],
+    de: ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"]
+  };
+  var I18N = {
+    da: {
+      sub: "Sammenlign to fodboldhold på rå statistik eller på tal, der er justeret for modstanderstyrke via Elo. Alle ligaer og lande ligger på samme Elo-skala.",
+      selAria: "Valg", league: "Liga", teamA: "Hold A", teamB: "Hold B", swap: "⇄ Byt", swapAria: "Byt hold A og B",
+      view: "Visning", adj: "Elo-justeret", raw: "Rå data", last: "Seneste kampe", nMatches: "{n} kampe", comps: "Turneringer",
+      allMatches: "Alle kampe", leagueOnly: "Kun liga", oddsTitle: "Fair odds og value", predTitle: "Modellens forudsigelse", predSub: "Mest sandsynlige resultat: {s} ({p}). Forventede mål: {a}–{b}.", predNote: "Uafgjort er sjældent det enkeltstående mest sandsynlige udfald, selvom det sker i cirka hver fjerde kamp.", dTitle: "Ansvarsfraskrivelse og vigtig information", d1: "<b>Kun til information.</b> Siden er et statistisk analyseværktøj. Den giver hverken spilråd, finansiel rådgivning eller løfter om gevinst. Forudsigelser og fair odds er modelberegninger ud fra tidligere resultater og kan være forkerte.", d2: "<b>Ingen garanti.</b> Modellen kender ikke til skader, trupper, trænervalg, vejr eller bookmakernes faktiske odds. Tidligere resultater siger ikke noget sikkert om fremtiden. Data kan være ufuldstændige, forsinkede eller forkerte, og ejeren hæfter ikke for tab, der opstår ved brug af siden.", d3: "<b>Spil ansvarligt.</b> Spil kun for beløb, du har råd til at miste. Spil er kun for personer over 18 år. Har du brug for hjælp eller vil udelukke dig selv, så kontakt StopSpillet.dk eller ROFUS (rofus.nu). Uden for Danmark: søg efter din nationale hjælpelinje.", d4: "<b>Kilder og varemærker.</b> Kampdata kommer fra projektet openfootball (public domain). Klub- og liganavne tilhører deres ejere og bruges kun til at identificere hold. Siden har ingen tilknytning til klubber, ligaer eller spiludbydere og modtager ingen betaling for at henvise til dem.", d5: "<b>Privatliv.</b> Siden indsamler ingen persondata og bruger ingen cookies, sporing eller eksterne skrifttyper. Dit sprogvalg og dine seneste valgte hold gemmes kun lokalt i din egen browser.", venueLabel: "Bane", neutral: "Neutral", homeAt: "{team} hjemme",
+      chartTitle: "Elo-udvikling siden 2019", chartAria: "Elo-rating for de to hold over tid", showNumbers: "Vis tal",
+      formTitle: "Form", h2hTitle: "Indbyrdes opgør", howtoSum: "Sådan virker det, og hvad det ikke kan",
+      foot: "Data: openfootball (public domain). Kun til information, ikke spilråd. 18+. Spil ansvarligt: StopSpillet.dk og ROFUS (rofus.nu).",
+      groupMain: "Store ligaer", groupOther: "Øvrige lande (kun europæiske kampe)", supStale: "{name} (data til maj 2025)",
+      fresh: "Ligaer til {a} · Champions League til {b}",
+      cmpAdj: "Sammenligning, justeret for modstanderstyrke", cmpRaw: "Sammenligning, rå tal",
+      eloLbl: "Elo · nr. {r} af {n} hold", diffLbl: "Elo-forskel (uden hjemmebane)",
+      bStale: "Data til maj 2025, ikke opdateret", bEuro: "Rating bygger kun på europæiske kampe", bNone: "Ingen kampe i valgt vindue", bFew: "Kun {n} kampe i vindue",
+      rElo: "Elo-rating", rEloSub: "nu", rSos: "Modstanderstyrke", rSosSub: "gns. Elo for modstandere", rPpg: "Point pr. kamp", rPpgSub: "rå",
+      rExp: "Forventede point pr. kamp", rExpSub: "ud fra Elo mod de modstandere", rOver: "Over/under forventning", rOverSub: "point pr. kamp",
+      rAgf: "Justerede mål pr. kamp", rAgfSub: "mod en gennemsnitsmodstander, neutral bane", rAga: "Justerede mål imod pr. kamp", lowerBetter: "lavere er bedre",
+      rAgd: "Justeret målforskel pr. kamp", rGf: "Mål pr. kamp", rGa: "Mål imod pr. kamp", rGd: "Målforskel pr. kamp", rCs: "Clean sheets",
+      rBt: "Begge hold scorer", rOv: "Over 2,5 mål", rWdl: "Sejre – uafgjort – nederlag",
+      noteBase: "Baseret på {na} kampe for {a} og {nb} for {b}. ",
+      noteNone: "Mindst ét af holdene har ingen kampe i det valgte vindue. Vælg «Alle kampe» for at få statistik for hold uden ligadata. ",
+      noteAdj: "Justerede mål regnes om til, hvad holdet ville score og lukke ind mod et gennemsnitligt hold fra de tre store ligaer (Elo {ref}) på neutral bane. Så kan hold fra forskellige ligaer sammenlignes direkte.",
+      noteRaw: "Rå tal tager ikke højde for, hvem holdene har mødt. Tal fra forskellige ligaer kan ikke sammenlignes direkte; skift til Elo-justeret for det.",
+      thOutcome: "Udfald", thModel: "Model", thFair: "Fair", thOdds: "Dit odds", thEdge: "Edge", g1x2: "1X2", gGoals: "Mål", gBtts: "Begge scorer",
+      wins: "{team} vinder", draw: "Uafgjort", over: "Over 2,5 mål", under: "Under 2,5 mål", yes: "Ja", no: "Nej",
+      xgLbl: "forventede mål, {team}", noOdds: "Ikke nok kampe i valgt vindue til at beregne odds.", scoresLbl: "Mest sandsynlige resultater",
+      oddsNoteAdj: "Odds er beregnet ud fra Elo-forskellen og en Poisson-model af mål (Dixon-Coles-korrektion for lave resultater). Resultatet vises fra {a}s side.",
+      oddsNoteRaw: "Rå-visningen bruger holdenes mål for og imod i vinduet (let trukket mod gennemsnittet, så få kampe ikke giver vilde tal). Den kender ikke ligaernes styrke.",
+      marginHint: "Indtast alle tre 1X2-odds for at se bookmakerens margin.", marginTxt: "Bookmakerens margin på 1X2: {x} %",
+      evPos: "Modellen ser mulig value", evNeg: "Odds er lavere end fair", evFair: "Tæt på fair", oddsAria: "Dit odds: {o}",
+      formNote: "S = sejr, U = uafgjort, N = nederlag. Hold musen over en kamp for detaljer. Ældste til venstre.",
+      lastLbl: "Seneste: {d} mod {o} {s}", noMatches: "Ingen kampe i vinduet.", vHome: "hjemme", vAway: "ude", vNeutral: "neutral",
+      fW: "S", fD: "U", fL: "N", vsWord: "mod",
+      h2hEmpty: "Ingen indbyrdes opgør i data. Ligadata går tilbage til 2000 (England), 2010 (Tyskland), 2012 (Spanien), 2013 (Italien), 2014 (Frankrig) og 2018 (Holland, Portugal), europæiske kampe til 2011.",
+      h2hSum: "{a} {w} {wl} · {d} uafgjort · {b} {l} {ll}<br>Mål: {gf}–{ga} i {n} kampe", winOne: "sejr", winMany: "sejre",
+      thDate: "Dato", thComp: "Turnering", thMatch: "Kamp", qual: "kval",
+      h1: "<b>Elo.</b> Hvert hold har ét tal. Et hold vinder point fra modstanderen, når det klarer sig bedre end forventet, og mister dem ellers. Hjemmebane tæller {hfa} Elo-point, og store sejre flytter mere end små. Ligakampe flytter ratingen med K = {kd}, europæiske kampe med K = {ke}.",
+      h2: "<b>På tværs af ligaer.</b> Ligaerne forbindes af Champions League, Europa League og Conference League siden 2011. Ligastyrken er indstillet, så europæiske resultater i gennemsnit passer med ratingerne. Gennemsnitlig Elo for holdene i listen: Premier League {m1}, La Liga {m2}, Bundesliga {m3}, Serie A {m4}, Ligue 1 {m5}.",
+      h3: "<b>Rå eller justeret.</b> Rå tal er simple gennemsnit over de seneste kampe. Justeret betyder, at hver kamps mål er skaleret efter modstanderens Elo og banen, så en 2–0-sejr over en topklub tæller mere end 2–0 over en bundklub.",
+      h4: "<b>Odds.</b> Elo-forskellen omregnes til forventede mål for hvert hold og derefter til sandsynligheder for udfald, over/under og begge scorer. Fair odds er 1 delt med sandsynligheden. Edge er sandsynlighed gange dit odds minus 1.",
+      h5: "<b>Test.</b> På {n} kampe efter juli 2024, som modellen ikke var tilpasset på, var den {imp} % bedre end en simpel frekvens-baseline på log-loss. Den ramte rigtigt udfald i {acc} % af kampene mod {accH} % ved altid at tippe hjemmesejr. Det er brugbart, men bookmakerne er stadig bedre.",
+      h6: "<b>Det modellen ikke ved.</b> Skader, udeblevne spillere, trænerskifte, motivation, vejr, xG og skud. Data har kun resultater. Hold uden for de syv ligaer har kun europæiske kampe, så deres rating er mere usikker. Seneste ligakampe i data er fra {date}."
+    },
+    en: {
+      sub: "Compare two football teams on raw statistics or on figures adjusted for opponent strength via Elo. All leagues and countries share the same Elo scale.",
+      selAria: "Selection", league: "League", teamA: "Team A", teamB: "Team B", swap: "⇄ Swap", swapAria: "Swap team A and B",
+      view: "View", adj: "Elo-adjusted", raw: "Raw data", last: "Recent matches", nMatches: "{n} matches", comps: "Competitions",
+      allMatches: "All matches", leagueOnly: "League only", oddsTitle: "Fair odds and value", predTitle: "Model prediction", predSub: "Most likely score: {s} ({p}). Expected goals: {a}–{b}.", predNote: "A draw is rarely the single most likely outcome, even though it happens in roughly one match in four.", dTitle: "Disclaimer and important information", d1: "<b>For information only.</b> This site is a statistical analysis tool. It does not provide betting tips, financial advice or any promise of winnings. Predictions and fair odds are model calculations based on past results and may be wrong.", d2: "<b>No guarantee.</b> The model knows nothing about injuries, squads, managers' choices, weather or the bookmakers' actual odds. Past results say nothing certain about the future. Data may be incomplete, delayed or wrong, and the owner accepts no liability for losses arising from use of the site.", d3: "<b>Gamble responsibly.</b> Only bet amounts you can afford to lose. Gambling is for people aged 18 and over. If you need help or want to self-exclude, contact StopSpillet.dk or ROFUS (rofus.nu) in Denmark. Elsewhere, look for your national helpline.", d4: "<b>Sources and trademarks.</b> Match data comes from the openfootball project (public domain). Club and league names belong to their owners and are used only to identify teams. The site has no affiliation with clubs, leagues or gambling operators and receives no payment for referring to them.", d5: "<b>Privacy.</b> The site collects no personal data and uses no cookies, tracking or external fonts. Your language choice and most recently selected teams are stored only locally in your own browser.", venueLabel: "Venue", neutral: "Neutral", homeAt: "{team} at home",
+      chartTitle: "Elo history since 2019", chartAria: "Elo rating of the two teams over time", showNumbers: "Show numbers",
+      formTitle: "Form", h2hTitle: "Head-to-head", howtoSum: "How it works, and what it cannot do",
+      foot: "Data: openfootball (public domain). For information only, not betting advice. 18+. Gamble responsibly: StopSpillet.dk and ROFUS (rofus.nu) in Denmark.",
+      groupMain: "Major leagues", groupOther: "Other countries (European matches only)", supStale: "{name} (data until May 2025)",
+      fresh: "Leagues to {a} · Champions League to {b}",
+      cmpAdj: "Comparison, adjusted for opponent strength", cmpRaw: "Comparison, raw figures",
+      eloLbl: "Elo · no. {r} of {n} teams", diffLbl: "Elo difference (excluding home advantage)",
+      bStale: "Data until May 2025, not updated", bEuro: "Rating based on European matches only", bNone: "No matches in selected window", bFew: "Only {n} matches in window",
+      rElo: "Elo rating", rEloSub: "now", rSos: "Opponent strength", rSosSub: "average Elo of opponents", rPpg: "Points per match", rPpgSub: "raw",
+      rExp: "Expected points per match", rExpSub: "based on Elo vs those opponents", rOver: "Over/under expectation", rOverSub: "points per match",
+      rAgf: "Adjusted goals per match", rAgfSub: "vs an average opponent, neutral venue", rAga: "Adjusted goals against per match", lowerBetter: "lower is better",
+      rAgd: "Adjusted goal difference per match", rGf: "Goals per match", rGa: "Goals against per match", rGd: "Goal difference per match", rCs: "Clean sheets",
+      rBt: "Both teams score", rOv: "Over 2.5 goals", rWdl: "Wins – draws – losses",
+      noteBase: "Based on {na} matches for {a} and {nb} for {b}. ",
+      noteNone: "At least one of the teams has no matches in the selected window. Choose “All matches” to get statistics for teams without league data. ",
+      noteAdj: "Adjusted goals are converted into what the team would score and concede against an average team from the three big leagues (Elo {ref}) on a neutral pitch. This lets teams from different leagues be compared directly.",
+      noteRaw: "Raw figures ignore who the teams have played. Figures from different leagues cannot be compared directly; switch to Elo-adjusted for that.",
+      thOutcome: "Outcome", thModel: "Model", thFair: "Fair", thOdds: "Your odds", thEdge: "Edge", g1x2: "1X2", gGoals: "Goals", gBtts: "Both teams score",
+      wins: "{team} wins", draw: "Draw", over: "Over 2.5 goals", under: "Under 2.5 goals", yes: "Yes", no: "No",
+      xgLbl: "expected goals, {team}", noOdds: "Not enough matches in the selected window to calculate odds.", scoresLbl: "Most likely scores",
+      oddsNoteAdj: "Odds are calculated from the Elo difference and a Poisson goal model (Dixon-Coles correction for low scores). The result is shown from {a}'s side.",
+      oddsNoteRaw: "The raw view uses each team's goals for and against in the window (pulled slightly towards the average so that few matches do not give wild numbers). It does not know how strong the leagues are.",
+      marginHint: "Enter all three 1X2 odds to see the bookmaker's margin.", marginTxt: "Bookmaker margin on 1X2: {x} %",
+      evPos: "The model sees possible value", evNeg: "Odds are lower than fair", evFair: "Close to fair", oddsAria: "Your odds: {o}",
+      formNote: "W = win, D = draw, L = loss. Hover over a match for details. Oldest on the left.",
+      lastLbl: "Latest: {d} vs {o} {s}", noMatches: "No matches in the window.", vHome: "home", vAway: "away", vNeutral: "neutral",
+      fW: "W", fD: "D", fL: "L", vsWord: "vs",
+      h2hEmpty: "No head-to-head matches in the data. League data goes back to 2000 (England), 2010 (Germany), 2012 (Spain), 2013 (Italy), 2014 (France) and 2018 (Netherlands, Portugal); European matches to 2011.",
+      h2hSum: "{a} {w} {wl} · {d} draws · {b} {l} {ll}<br>Goals: {gf}–{ga} in {n} matches", winOne: "win", winMany: "wins",
+      thDate: "Date", thComp: "Competition", thMatch: "Match", qual: "qual.",
+      h1: "<b>Elo.</b> Each team has one number. A team gains points from its opponent when it does better than expected, and loses them otherwise. Home advantage counts for {hfa} Elo points, and big wins move the rating more than narrow ones. League matches move the rating with K = {kd}, European matches with K = {ke}.",
+      h2: "<b>Across leagues.</b> The leagues are linked by the Champions League, Europa League and Conference League since 2011. League strength is tuned so that European results fit the ratings on average. Average Elo of the teams in the list: Premier League {m1}, La Liga {m2}, Bundesliga {m3}, Serie A {m4}, Ligue 1 {m5}.",
+      h3: "<b>Raw or adjusted.</b> Raw figures are simple averages over the latest matches. Adjusted means each match's goals are scaled by the opponent's Elo and the venue, so a 2–0 win over a top club counts for more than 2–0 over a bottom club.",
+      h4: "<b>Odds.</b> The Elo difference is converted into expected goals for each team and then into probabilities for the result, over/under and both teams to score. Fair odds are 1 divided by the probability. Edge is probability times your odds minus 1.",
+      h5: "<b>Test.</b> On {n} matches after July 2024, which the model was not fitted on, it was {imp} % better than a simple frequency baseline on log-loss. It picked the right outcome in {acc} % of matches versus {accH} % by always picking a home win. That is useful, but the bookmakers are still better.",
+      h6: "<b>What the model does not know.</b> Injuries, suspensions, managerial changes, motivation, weather, xG and shots. The data only has results. Teams outside the seven leagues only have European matches, so their rating is less certain. The latest league matches in the data are from {date}."
+    },
+    es: {
+      sub: "Compara dos equipos de fútbol con estadísticas en bruto o ajustadas por la fuerza de los rivales mediante Elo. Todas las ligas y países comparten la misma escala Elo.",
+      selAria: "Selección", league: "Liga", teamA: "Equipo A", teamB: "Equipo B", swap: "⇄ Cambiar", swapAria: "Intercambiar equipo A y B",
+      view: "Vista", adj: "Ajustado por Elo", raw: "Datos en bruto", last: "Últimos partidos", nMatches: "{n} partidos", comps: "Competiciones",
+      allMatches: "Todos los partidos", leagueOnly: "Solo liga", oddsTitle: "Cuotas justas y valor", predTitle: "Predicción del modelo", predSub: "Resultado más probable: {s} ({p}). Goles esperados: {a}–{b}.", predNote: "El empate rara vez es el resultado individual más probable, aunque ocurre en aproximadamente uno de cada cuatro partidos.", dTitle: "Descargo de responsabilidad e información importante", d1: "<b>Solo informativo.</b> Este sitio es una herramienta de análisis estadístico. No ofrece consejos de apuestas, asesoramiento financiero ni promesas de ganancias. Las predicciones y las cuotas justas son cálculos del modelo basados en resultados pasados y pueden ser erróneos.", d2: "<b>Sin garantía.</b> El modelo no conoce lesiones, plantillas, decisiones de los entrenadores, el clima ni las cuotas reales de las casas de apuestas. Los resultados pasados no dicen nada seguro sobre el futuro. Los datos pueden estar incompletos, retrasados o ser incorrectos, y el propietario no se responsabiliza de pérdidas derivadas del uso del sitio.", d3: "<b>Juega con responsabilidad.</b> Apuesta solo cantidades que puedas permitirte perder. Las apuestas son solo para mayores de 18 años. Si necesitas ayuda o quieres autoexcluirte, contacta con StopSpillet.dk o ROFUS (rofus.nu) en Dinamarca. En otros países, busca tu línea de ayuda nacional.", d4: "<b>Fuentes y marcas.</b> Los datos de partidos proceden del proyecto openfootball (dominio público). Los nombres de clubes y ligas pertenecen a sus propietarios y se usan solo para identificar equipos. El sitio no tiene vinculación con clubes, ligas ni operadores de apuestas y no recibe pago por referirse a ellos.", d5: "<b>Privacidad.</b> El sitio no recoge datos personales y no usa cookies, rastreo ni fuentes externas. Tu idioma y los últimos equipos elegidos se guardan solo localmente en tu propio navegador.", venueLabel: "Campo", neutral: "Neutral", homeAt: "{team} en casa",
+      chartTitle: "Evolución del Elo desde 2019", chartAria: "Rating Elo de los dos equipos a lo largo del tiempo", showNumbers: "Mostrar cifras",
+      formTitle: "Forma", h2hTitle: "Enfrentamientos directos", howtoSum: "Cómo funciona y qué no puede hacer",
+      foot: "Datos: openfootball (dominio público). Solo informativo, no es un consejo de apuestas. +18. Juega con responsabilidad: StopSpillet.dk y ROFUS (rofus.nu) en Dinamarca.",
+      groupMain: "Grandes ligas", groupOther: "Otros países (solo partidos europeos)", supStale: "{name} (datos hasta mayo de 2025)",
+      fresh: "Ligas hasta {a} · Champions League hasta {b}",
+      cmpAdj: "Comparación ajustada por la fuerza del rival", cmpRaw: "Comparación con cifras en bruto",
+      eloLbl: "Elo · n.º {r} de {n} equipos", diffLbl: "Diferencia de Elo (sin ventaja de local)",
+      bStale: "Datos hasta mayo de 2025, sin actualizar", bEuro: "Rating basado solo en partidos europeos", bNone: "Sin partidos en la ventana elegida", bFew: "Solo {n} partidos en la ventana",
+      rElo: "Rating Elo", rEloSub: "actual", rSos: "Fuerza de los rivales", rSosSub: "Elo medio de los rivales", rPpg: "Puntos por partido", rPpgSub: "en bruto",
+      rExp: "Puntos esperados por partido", rExpSub: "según el Elo ante esos rivales", rOver: "Por encima/debajo de lo esperado", rOverSub: "puntos por partido",
+      rAgf: "Goles ajustados por partido", rAgfSub: "ante un rival medio, campo neutral", rAga: "Goles encajados ajustados por partido", lowerBetter: "menos es mejor",
+      rAgd: "Diferencia de goles ajustada por partido", rGf: "Goles por partido", rGa: "Goles encajados por partido", rGd: "Diferencia de goles por partido", rCs: "Porterías a cero",
+      rBt: "Marcan ambos equipos", rOv: "Más de 2,5 goles", rWdl: "Victorias – empates – derrotas",
+      noteBase: "Basado en {na} partidos de {a} y {nb} de {b}. ",
+      noteNone: "Al menos uno de los equipos no tiene partidos en la ventana elegida. Elige «Todos los partidos» para obtener estadísticas de equipos sin datos de liga. ",
+      noteAdj: "Los goles ajustados se convierten en lo que el equipo marcaría y encajaría ante un equipo medio de las tres grandes ligas (Elo {ref}) en campo neutral. Así se pueden comparar directamente equipos de distintas ligas.",
+      noteRaw: "Las cifras en bruto ignoran a qué rivales se ha enfrentado cada equipo. Las cifras de ligas distintas no se pueden comparar directamente; cambia a Ajustado por Elo para ello.",
+      thOutcome: "Resultado", thModel: "Modelo", thFair: "Justa", thOdds: "Tu cuota", thEdge: "Ventaja", g1x2: "1X2", gGoals: "Goles", gBtts: "Marcan ambos",
+      wins: "Gana {team}", draw: "Empate", over: "Más de 2,5 goles", under: "Menos de 2,5 goles", yes: "Sí", no: "No",
+      xgLbl: "goles esperados, {team}", noOdds: "No hay suficientes partidos en la ventana elegida para calcular cuotas.", scoresLbl: "Resultados más probables",
+      oddsNoteAdj: "Las cuotas se calculan a partir de la diferencia de Elo y un modelo de Poisson de goles (corrección de Dixon-Coles para marcadores bajos). El resultado se muestra desde el lado de {a}.",
+      oddsNoteRaw: "La vista en bruto usa los goles a favor y en contra de cada equipo en la ventana (acercados ligeramente a la media para que pocos partidos no den cifras exageradas). No conoce la fuerza de las ligas.",
+      marginHint: "Introduce las tres cuotas 1X2 para ver el margen de la casa de apuestas.", marginTxt: "Margen de la casa en 1X2: {x} %",
+      evPos: "El modelo ve posible valor", evNeg: "La cuota es inferior a la justa", evFair: "Cerca de la cuota justa", oddsAria: "Tu cuota: {o}",
+      formNote: "G = ganado, E = empatado, P = perdido. Pasa el ratón sobre un partido para ver detalles. Los más antiguos a la izquierda.",
+      lastLbl: "Último: {d} contra {o} {s}", noMatches: "No hay partidos en la ventana.", vHome: "en casa", vAway: "fuera", vNeutral: "neutral",
+      fW: "G", fD: "E", fL: "P", vsWord: "contra",
+      h2hEmpty: "No hay enfrentamientos directos en los datos. Los datos de liga se remontan a 2000 (Inglaterra), 2010 (Alemania), 2012 (España), 2013 (Italia), 2014 (Francia) y 2018 (Países Bajos, Portugal); los partidos europeos, a 2011.",
+      h2hSum: "{a} {w} {wl} · {d} empates · {b} {l} {ll}<br>Goles: {gf}–{ga} en {n} partidos", winOne: "victoria", winMany: "victorias",
+      thDate: "Fecha", thComp: "Competición", thMatch: "Partido", qual: "clasif.",
+      h1: "<b>Elo.</b> Cada equipo tiene un número. Un equipo gana puntos a su rival cuando rinde mejor de lo esperado y los pierde en caso contrario. La ventaja de local vale {hfa} puntos Elo y las victorias amplias mueven más el rating que las ajustadas. Los partidos de liga mueven el rating con K = {kd} y los europeos con K = {ke}.",
+      h2: "<b>Entre ligas.</b> Las ligas se conectan mediante la Champions League, la Europa League y la Conference League desde 2011. La fuerza de cada liga está ajustada para que los resultados europeos encajen de media con los ratings. Elo medio de los equipos de la lista: Premier League {m1}, La Liga {m2}, Bundesliga {m3}, Serie A {m4}, Ligue 1 {m5}.",
+      h3: "<b>En bruto o ajustado.</b> Las cifras en bruto son medias simples de los últimos partidos. Ajustado significa que los goles de cada partido se escalan según el Elo del rival y el campo, de modo que un 2–0 ante un equipo de arriba vale más que un 2–0 ante uno de abajo.",
+      h4: "<b>Cuotas.</b> La diferencia de Elo se convierte en goles esperados para cada equipo y después en probabilidades de resultado, más/menos goles y ambos marcan. La cuota justa es 1 dividido entre la probabilidad. La ventaja es la probabilidad por tu cuota menos 1.",
+      h5: "<b>Prueba.</b> En {n} partidos posteriores a julio de 2024, con los que el modelo no se ajustó, fue un {imp} % mejor que una referencia simple de frecuencias en log-loss. Acertó el resultado en el {acc} % de los partidos frente al {accH} % de apostar siempre por la victoria local. Es útil, pero las casas de apuestas siguen siendo mejores.",
+      h6: "<b>Lo que el modelo no sabe.</b> Lesiones, sanciones, cambios de entrenador, motivación, clima, xG y tiros. Los datos solo contienen resultados. Los equipos de fuera de las siete ligas solo tienen partidos europeos, por lo que su rating es menos fiable. Los últimos partidos de liga en los datos son del {date}."
+    },
+    de: {
+      sub: "Vergleiche zwei Fußballteams anhand von Rohstatistiken oder von Werten, die über Elo an die Gegnerstärke angepasst sind. Alle Ligen und Länder liegen auf derselben Elo-Skala.",
+      selAria: "Auswahl", league: "Liga", teamA: "Team A", teamB: "Team B", swap: "⇄ Tauschen", swapAria: "Team A und B tauschen",
+      view: "Ansicht", adj: "Elo-bereinigt", raw: "Rohdaten", last: "Letzte Spiele", nMatches: "{n} Spiele", comps: "Wettbewerbe",
+      allMatches: "Alle Spiele", leagueOnly: "Nur Liga", oddsTitle: "Faire Quoten und Value", predTitle: "Modellprognose", predSub: "Wahrscheinlichstes Ergebnis: {s} ({p}). Erwartete Tore: {a}–{b}.", predNote: "Ein Unentschieden ist selten der einzelne wahrscheinlichste Ausgang, obwohl es in etwa jedem vierten Spiel vorkommt.", dTitle: "Haftungsausschluss und wichtige Hinweise", d1: "<b>Nur zur Information.</b> Diese Seite ist ein statistisches Analysewerkzeug. Sie bietet weder Wetttipps noch Finanzberatung noch Gewinnversprechen. Prognosen und faire Quoten sind Modellrechnungen auf Basis vergangener Ergebnisse und können falsch sein.", d2: "<b>Keine Garantie.</b> Das Modell kennt keine Verletzungen, Kader, Trainerentscheidungen, das Wetter oder die tatsächlichen Quoten der Buchmacher. Vergangene Ergebnisse sagen nichts Sicheres über die Zukunft. Die Daten können unvollständig, verspätet oder fehlerhaft sein, und der Betreiber haftet nicht für Verluste, die durch die Nutzung der Seite entstehen.", d3: "<b>Spiele verantwortungsvoll.</b> Setze nur Beträge, deren Verlust du verkraften kannst. Glücksspiel ist nur für Personen ab 18 Jahren. Wenn du Hilfe brauchst oder dich sperren lassen willst, wende dich in Dänemark an StopSpillet.dk oder ROFUS (rofus.nu). In anderen Ländern suche nach deiner nationalen Hilfestelle.", d4: "<b>Quellen und Marken.</b> Die Spieldaten stammen aus dem Projekt openfootball (gemeinfrei). Vereins- und Ligennamen gehören ihren Inhabern und dienen nur zur Identifizierung der Teams. Die Seite steht in keiner Verbindung zu Vereinen, Ligen oder Glücksspielanbietern und erhält keine Vergütung für Verweise auf sie.", d5: "<b>Datenschutz.</b> Die Seite erhebt keine personenbezogenen Daten und verwendet keine Cookies, kein Tracking und keine externen Schriftarten. Deine Sprachwahl und die zuletzt gewählten Teams werden nur lokal in deinem eigenen Browser gespeichert.", venueLabel: "Spielort", neutral: "Neutral", homeAt: "{team} zu Hause",
+      chartTitle: "Elo-Verlauf seit 2019", chartAria: "Elo-Rating der beiden Teams im Zeitverlauf", showNumbers: "Zahlen anzeigen",
+      formTitle: "Form", h2hTitle: "Direkter Vergleich", howtoSum: "So funktioniert es und was es nicht kann",
+      foot: "Daten: openfootball (gemeinfrei). Nur zur Information, keine Wettempfehlung. 18+. Spiele verantwortungsvoll: StopSpillet.dk und ROFUS (rofus.nu) in Dänemark.",
+      groupMain: "Große Ligen", groupOther: "Weitere Länder (nur europäische Spiele)", supStale: "{name} (Daten bis Mai 2025)",
+      fresh: "Ligen bis {a} · Champions League bis {b}",
+      cmpAdj: "Vergleich, bereinigt um die Gegnerstärke", cmpRaw: "Vergleich, Rohwerte",
+      eloLbl: "Elo · Nr. {r} von {n} Teams", diffLbl: "Elo-Differenz (ohne Heimvorteil)",
+      bStale: "Daten bis Mai 2025, nicht aktualisiert", bEuro: "Rating beruht nur auf europäischen Spielen", bNone: "Keine Spiele im gewählten Zeitfenster", bFew: "Nur {n} Spiele im Zeitfenster",
+      rElo: "Elo-Rating", rEloSub: "aktuell", rSos: "Gegnerstärke", rSosSub: "Ø Elo der Gegner", rPpg: "Punkte pro Spiel", rPpgSub: "roh",
+      rExp: "Erwartete Punkte pro Spiel", rExpSub: "laut Elo gegen diese Gegner", rOver: "Über/unter Erwartung", rOverSub: "Punkte pro Spiel",
+      rAgf: "Bereinigte Tore pro Spiel", rAgfSub: "gegen einen durchschnittlichen Gegner, neutraler Platz", rAga: "Bereinigte Gegentore pro Spiel", lowerBetter: "niedriger ist besser",
+      rAgd: "Bereinigte Tordifferenz pro Spiel", rGf: "Tore pro Spiel", rGa: "Gegentore pro Spiel", rGd: "Tordifferenz pro Spiel", rCs: "Zu null",
+      rBt: "Beide Teams treffen", rOv: "Über 2,5 Tore", rWdl: "Siege – Unentschieden – Niederlagen",
+      noteBase: "Basierend auf {na} Spielen von {a} und {nb} von {b}. ",
+      noteNone: "Mindestens eines der Teams hat im gewählten Zeitfenster keine Spiele. Wähle „Alle Spiele“, um Statistiken für Teams ohne Ligadaten zu erhalten. ",
+      noteAdj: "Bereinigte Tore werden darauf umgerechnet, wie viele Tore das Team gegen eine durchschnittliche Mannschaft der drei großen Ligen (Elo {ref}) auf neutralem Platz erzielen und kassieren würde. So lassen sich Teams aus verschiedenen Ligen direkt vergleichen.",
+      noteRaw: "Rohwerte ignorieren, gegen wen die Teams gespielt haben. Werte aus verschiedenen Ligen sind nicht direkt vergleichbar; wechsle dafür zu Elo-bereinigt.",
+      thOutcome: "Ausgang", thModel: "Modell", thFair: "Fair", thOdds: "Deine Quote", thEdge: "Edge", g1x2: "1X2", gGoals: "Tore", gBtts: "Beide Teams treffen",
+      wins: "{team} gewinnt", draw: "Unentschieden", over: "Über 2,5 Tore", under: "Unter 2,5 Tore", yes: "Ja", no: "Nein",
+      xgLbl: "erwartete Tore, {team}", noOdds: "Im gewählten Zeitfenster gibt es zu wenige Spiele, um Quoten zu berechnen.", scoresLbl: "Wahrscheinlichste Ergebnisse",
+      oddsNoteAdj: "Die Quoten werden aus der Elo-Differenz und einem Poisson-Modell der Tore berechnet (Dixon-Coles-Korrektur für niedrige Ergebnisse). Das Ergebnis wird aus Sicht von {a} gezeigt.",
+      oddsNoteRaw: "Die Rohansicht nutzt die erzielten und kassierten Tore der Teams im Zeitfenster (leicht zum Durchschnitt gezogen, damit wenige Spiele keine wilden Werte ergeben). Sie kennt die Stärke der Ligen nicht.",
+      marginHint: "Gib alle drei 1X2-Quoten ein, um die Marge des Buchmachers zu sehen.", marginTxt: "Buchmachermarge bei 1X2: {x} %",
+      evPos: "Das Modell sieht möglichen Value", evNeg: "Quote liegt unter der fairen", evFair: "Nahe an fair", oddsAria: "Deine Quote: {o}",
+      formNote: "S = Sieg, U = Unentschieden, N = Niederlage. Fahre über ein Spiel für Details. Älteste links.",
+      lastLbl: "Zuletzt: {d} gegen {o} {s}", noMatches: "Keine Spiele im Zeitfenster.", vHome: "zu Hause", vAway: "auswärts", vNeutral: "neutral",
+      fW: "S", fD: "U", fL: "N", vsWord: "gegen",
+      h2hEmpty: "Keine direkten Duelle in den Daten. Die Ligadaten reichen bis 2000 (England), 2010 (Deutschland), 2012 (Spanien), 2013 (Italien), 2014 (Frankreich) und 2018 (Niederlande, Portugal) zurück, europäische Spiele bis 2011.",
+      h2hSum: "{a} {w} {wl} · {d} Unentschieden · {b} {l} {ll}<br>Tore: {gf}–{ga} in {n} Spielen", winOne: "Sieg", winMany: "Siege",
+      thDate: "Datum", thComp: "Wettbewerb", thMatch: "Spiel", qual: "Quali",
+      h1: "<b>Elo.</b> Jedes Team hat eine Zahl. Ein Team gewinnt Punkte vom Gegner, wenn es besser abschneidet als erwartet, und verliert sie sonst. Der Heimvorteil zählt {hfa} Elo-Punkte, und hohe Siege verschieben das Rating stärker als knappe. Ligaspiele bewegen das Rating mit K = {kd}, europäische Spiele mit K = {ke}.",
+      h2: "<b>Über Ligen hinweg.</b> Die Ligen sind seit 2011 über Champions League, Europa League und Conference League verbunden. Die Ligastärke ist so eingestellt, dass europäische Ergebnisse im Schnitt zu den Ratings passen. Durchschnittliches Elo der Teams in der Liste: Premier League {m1}, La Liga {m2}, Bundesliga {m3}, Serie A {m4}, Ligue 1 {m5}.",
+      h3: "<b>Roh oder bereinigt.</b> Rohwerte sind einfache Durchschnitte über die letzten Spiele. Bereinigt heißt, dass die Tore jedes Spiels nach dem Elo des Gegners und dem Spielort skaliert werden. Ein 2:0 gegen einen Topklub zählt also mehr als ein 2:0 gegen einen Abstiegskandidaten.",
+      h4: "<b>Quoten.</b> Die Elo-Differenz wird in erwartete Tore für jedes Team und dann in Wahrscheinlichkeiten für Ausgang, Über/Unter und Beide treffen umgerechnet. Die faire Quote ist 1 geteilt durch die Wahrscheinlichkeit. Der Edge ist Wahrscheinlichkeit mal deine Quote minus 1.",
+      h5: "<b>Test.</b> Auf {n} Spielen nach Juli 2024, an die das Modell nicht angepasst wurde, war es beim Log-Loss {imp} % besser als eine einfache Häufigkeits-Basislinie. Es traf den richtigen Ausgang in {acc} % der Spiele, gegenüber {accH} %, wenn man immer auf den Heimsieg tippt. Das ist brauchbar, aber die Buchmacher sind weiterhin besser.",
+      h6: "<b>Was das Modell nicht weiß.</b> Verletzungen, Sperren, Trainerwechsel, Motivation, Wetter, xG und Schüsse. Die Daten enthalten nur Ergebnisse. Teams außerhalb der sieben Ligen haben nur europäische Spiele, ihr Rating ist daher unsicherer. Die jüngsten Ligaspiele in den Daten sind vom {date}."
+    }
+  };
+  // country names: [da, en, es, de]
+  var CN = {
+    ITA: ["Italien", "Italy", "Italia", "Italien"], FRA: ["Frankrig", "France", "Francia", "Frankreich"], BEL: ["Belgien", "Belgium", "Bélgica", "Belgien"],
+    NED: ["Holland", "Netherlands", "Países Bajos", "Niederlande"], POR: ["Portugal", "Portugal", "Portugal", "Portugal"], AUT: ["Østrig", "Austria", "Austria", "Österreich"],
+    CZE: ["Tjekkiet", "Czechia", "Chequia", "Tschechien"], TUR: ["Tyrkiet", "Turkey", "Turquía", "Türkei"], CYP: ["Cypern", "Cyprus", "Chipre", "Zypern"],
+    GRE: ["Grækenland", "Greece", "Grecia", "Griechenland"], SCO: ["Skotland", "Scotland", "Escocia", "Schottland"], SUI: ["Schweiz", "Switzerland", "Suiza", "Schweiz"],
+    SWE: ["Sverige", "Sweden", "Suecia", "Schweden"], KAZ: ["Kasakhstan", "Kazakhstan", "Kazajistán", "Kasachstan"], NOR: ["Norge", "Norway", "Noruega", "Norwegen"],
+    POL: ["Polen", "Poland", "Polonia", "Polen"], SRB: ["Serbien", "Serbia", "Serbia", "Serbien"], SVN: ["Slovenien", "Slovenia", "Eslovenia", "Slowenien"],
+    UKR: ["Ukraine", "Ukraine", "Ucrania", "Ukraine"], ARM: ["Armenien", "Armenia", "Armenia", "Armenien"], AZE: ["Aserbajdsjan", "Azerbaijan", "Azerbaiyán", "Aserbaidschan"],
+    BIH: ["Bosnien-Hercegovina", "Bosnia and Herzegovina", "Bosnia y Herzegovina", "Bosnien und Herzegowina"], BLR: ["Belarus", "Belarus", "Bielorrusia", "Belarus"],
+    BUL: ["Bulgarien", "Bulgaria", "Bulgaria", "Bulgarien"], CRO: ["Kroatien", "Croatia", "Croacia", "Kroatien"], FIN: ["Finland", "Finland", "Finlandia", "Finnland"],
+    HUN: ["Ungarn", "Hungary", "Hungría", "Ungarn"], IRL: ["Irland", "Ireland", "Irlanda", "Irland"], ISL: ["Island", "Iceland", "Islandia", "Island"],
+    DEN: ["Danmark", "Denmark", "Dinamarca", "Dänemark"], ISR: ["Israel", "Israel", "Israel", "Israel"], LVA: ["Letland", "Latvia", "Letonia", "Lettland"], MCO: ["Monaco", "Monaco", "Mónaco", "Monaco"],
+    MDA: ["Moldova", "Moldova", "Moldavia", "Moldau"], NIR: ["Nordirland", "Northern Ireland", "Irlanda del Norte", "Nordirland"], ROU: ["Rumænien", "Romania", "Rumanía", "Rumänien"],
+    SVK: ["Slovakiet", "Slovakia", "Eslovaquia", "Slowakei"], WAL: ["Wales", "Wales", "Gales", "Wales"]
+  };
+  var L = "da";
+  try { var sl = localStorage.getItem("elo-h2h-lang"); if (LANGS.indexOf(sl) >= 0) L = sl; } catch (e) {}
+  function li() { return LANGS.indexOf(L); }
+  function t(k, v) {
+    var s = I18N[L][k];
+    if (s == null) s = I18N.da[k];
+    if (v) s = s.replace(/\{(\w+)\}/g, function (m, n) { return v[n] != null ? v[n] : m; });
+    return s;
+  }
+  function leagueName(c) {
+    if (c === "ENG") return "Premier League";
+    if (c === "ESP") return "La Liga";
+    if (c === "GER") return "Bundesliga";
+    if (c === "ITA") return "Serie A";
+    if (c === "FRA") return "Ligue 1";
+    if (c === "NED") return "Eredivisie";
+    if (c === "POR") return "Primeira Liga";
+    return CN[c] ? CN[c][li()] : c;
+  }
+  function compLabel(i) {
+    var base = ["PL", "BL", "LL", "SA", "L1", "ED", "PPL", "CL", "CL", "EL", "EL", "Conf", "Conf"][i];
+    return (i === 8 || i === 10 || i === 12) ? base + " " + t("qual") : base;
+  }
+
+  // ---------- formatting
+  function nf(x, d) { if (x == null || isNaN(x)) return "–"; d = d == null ? 2 : d; return x.toLocaleString(LOC[L], { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  function pct(x, d) { return nf(x * 100, d == null ? 0 : d) + " %"; }
+  function sgn(x, d) { return (x > 0.0005 ? "+" : (x < -0.0005 ? "−" : "")) + nf(Math.abs(x), d); }
+  function p2(n) { return ("0" + n).slice(-2); }
+  function dmy(d) {
+    var dd = p2(d % 100), mm = p2(Math.floor(d / 100) % 100), yy = String(Math.floor(d / 10000)).slice(2);
+    return (L === "en" || L === "es") ? dd + "/" + mm + "/" + yy : dd + "." + mm + "." + yy;
+  }
+  function dlong(iso) {
+    var p = iso.split("-"), d = parseInt(p[2], 10), m = MONTHS[L][parseInt(p[1], 10) - 1], y = p[0];
+    return (L === "da" || L === "de") ? d + ". " + m + " " + y : d + " " + m + " " + y;
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function $(id) { return document.getElementById(id); }
+
+  // ---------- team lists
+  var sel = [];
+  T.forEach(function (tm, i) { if (tm.sel) sel.push(i); });
+  var ranked = sel.slice().sort(function (a, b) { return T[b].r - T[a].r; });
+  var rankOf = {};
+  ranked.forEach(function (i, k) { rankOf[i] = k + 1; });
+  var BIG = { ENG: 1, GER: 1, ESP: 1, ITA: 1, FRA: 1, NED: 1, POR: 1 };
+  var MAIN = ["ENG", "ESP", "GER", "ITA", "FRA", "NED", "POR"];
+  var codes = [];
+  sel.forEach(function (i) { if (codes.indexOf(T[i].c) < 0) codes.push(T[i].c); });
+  function fillLeague(el) {
+    function o(c) { return '<option value="' + c + '">' + esc(leagueName(c)) + "</option>"; }
+    var other = codes.filter(function (c) { return !BIG[c]; }).sort(function (x, y) { return leagueName(x).localeCompare(leagueName(y), LOC[L]); });
+    el.innerHTML = '<optgroup label="' + esc(t("groupMain")) + '">' + MAIN.map(o).join("") + '</optgroup><optgroup label="' + esc(t("groupOther")) + '">' + other.map(o).join("") + "</optgroup>";
+  }
+  function teamsIn(c) {
+    return sel.filter(function (i) { return T[i].c === c; }).sort(function (a, b) { return T[a].name.localeCompare(T[b].name, LOC[L]); });
+  }
+  function strongest(c) { return teamsIn(c).sort(function (a, b) { return T[b].r - T[a].r; })[0]; }
+  function fillTeams(el, c, chosen) {
+    el.innerHTML = teamsIn(c).map(function (i) { return '<option value="' + i + '">' + esc(T[i].name) + "</option>"; }).join("");
+    el.value = String(chosen);
+  }
+  function syncPick(side) {
+    var idx = side === "A" ? S.a : S.b;
+    $("lg" + side).value = T[idx].c;
+    fillTeams($("sel" + side), T[idx].c, idx);
+  }
+  function findId(id) { for (var i = 0; i < T.length; i++) if (T[i].id === id) return i; return sel[0]; }
+
+  var S = { a: findId("ENG:arsenal"), b: findId("GER:bayern munchen"), mode: "adj", win: 10, comp: "all", venue: "H" };
+  try {
+    var saved = JSON.parse(localStorage.getItem("elo-h2h") || "null");
+    if (saved && prof[saved.a] && prof[saved.b]) { S.a = saved.a; S.b = saved.b; }
+  } catch (e) {}
+  function persist() { try { localStorage.setItem("elo-h2h", JSON.stringify({ a: S.a, b: S.b })); } catch (e) {} }
+
+  // ---------- window + stats
+  function toDate(n) { return new Date(Math.floor(n / 10000), (Math.floor(n / 100) % 100) - 1, n % 100); }
+  function toInt(d) { return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
+  function windowOf(idx) {
+    var ms = prof[idx].m.slice();
+    if (S.comp === "league") ms = ms.filter(function (m) { return m[1] <= 6; });
+    if (!ms.length) return [];
+    var last = toDate(ms[ms.length - 1][0]);
+    last.setDate(last.getDate() - 540);
+    var cut = toInt(last);
+    ms = ms.filter(function (m) { return m[0] >= cut; });
+    return ms.slice(-S.win);
+  }
+  function stats(ms) {
+    var n = ms.length;
+    if (!n) return null;
+    var W = 0, Dd = 0, Lo = 0, gf = 0, ga = 0, cs = 0, bt = 0, ov = 0, sos = 0, ex = 0, agf = 0, aga = 0;
+    ms.forEach(function (m) {
+      var f = m[4], a = m[5], rs = m[6], ro = m[7], v = m[2];
+      gf += f; ga += a;
+      if (f > a) W++; else if (f === a) Dd++; else Lo++;
+      if (a === 0) cs++;
+      if (f > 0 && a > 0) bt++;
+      if (f + a >= 3) ov++;
+      sos += ro;
+      var s = v === 1 ? 1 : (v === 0 ? -1 : 0);
+      var adj = Math.exp(MD.b * ((ro - MD.r_ref) - s * MD.hfa) / 400);
+      agf += f * adj; aga += a / adj;
+      ex += expectedPoints(rs, ro, v);
+    });
+    var ppg = (3 * W + Dd) / n;
+    return { n: n, W: W, D: Dd, L: Lo, ppg: ppg, gf: gf / n, ga: ga / n, gd: (gf - ga) / n, cs: cs / n, bt: bt / n, ov: ov / n, sos: sos / n,
+             exp: ex / n, over: ppg - ex / n, agf: agf / n, aga: aga / n, agd: (agf - aga) / n };
+  }
+
+  // ---------- rows
+  function rowHTML(r) {
+    var va = r.a, vb = r.b;
+    if (va == null || vb == null) return '<div class="row text"><div class="rlabel">' + r.label + '</div><span class="num l">–</span><span class="mid"></span><span class="num r">–</span></div>';
+    var leadA = false, leadB = false;
+    if (r.better) {
+      var diff = va - vb;
+      if (Math.abs(diff) > (r.eps || 1e-9)) { if ((diff > 0) === (r.better === "high")) leadA = true; else leadB = true; }
+    }
+    var out = '<div class="row' + (r.bar ? "" : " text") + '"><div class="rlabel">' + r.label + (r.sub ? " <small>" + r.sub + "</small>" : "") + "</div>";
+    out += '<span class="num l' + (leadA ? " lead" : "") + '">' + r.fmt(va) + "</span>";
+    if (r.bar) {
+      var mx = Math.max(va, vb, 1e-9);
+      out += '<span class="track ta"><i style="width:' + (100 * va / mx).toFixed(1) + '%"></i></span><span class="track tb"><i style="width:' + (100 * vb / mx).toFixed(1) + '%"></i></span>';
+    } else out += '<span class="mid"></span>';
+    out += '<span class="num r' + (leadB ? " lead" : "") + '">' + r.fmt(vb) + "</span></div>";
+    return out;
+  }
+
+  var cur = {};
+  function renderAll() {
+    var ta = T[S.a], tb = T[S.b];
+    var wa = windowOf(S.a), wb = windowOf(S.b);
+    var sa = stats(wa), sb = stats(wb);
+    cur = { sa: sa, sb: sb, wa: wa, wb: wb };
+    var adj = S.mode === "adj";
+
+    function card(i, cls) {
+      var tm = T[i], bd = [];
+      if (!BIG[tm.c]) bd.push(t("bEuro"));
+      var s = cls === "a" ? sa : sb;
+      if (!s) bd.push(t("bNone"));
+      else if (s.n < 5) bd.push(t("bFew", { n: s.n }));
+      return '<div class="team ' + cls + '"><div class="lg">' + esc(leagueName(tm.c)) + '</div><div class="nm">' + esc(tm.name) + '</div><div class="elo">' + tm.r + '</div><div class="rk">' + esc(t("eloLbl", { r: rankOf[i], n: sel.length })) + "</div>" +
+        (bd.length ? '<div class="badges">' + bd.map(function (x) { return '<span class="badge">' + esc(x) + "</span>"; }).join("") + "</div>" : "") + "</div>";
+    }
+    var ed = ta.r - tb.r;
+    $("faceoff").innerHTML = card(S.a, "a") +
+      '<div class="vs"><div class="d">' + (ed >= 0 ? "A " : "B ") + "+" + Math.abs(ed) + '</div><div class="t">' + esc(t("diffLbl")) + "</div></div>" + card(S.b, "b");
+
+    var rows = [];
+    rows.push({ label: t("rElo"), sub: t("rEloSub"), a: ta.r, b: tb.r, fmt: function (v) { return String(v); }, better: "high", eps: 0.5 });
+    if (sa && sb) {
+      if (adj) {
+        rows.push({ label: t("rSos"), sub: t("rSosSub"), a: sa.sos, b: sb.sos, fmt: function (v) { return nf(v, 0); }, better: "high", eps: 5 });
+        rows.push({ label: t("rPpg"), sub: t("rPpgSub"), a: sa.ppg, b: sb.ppg, fmt: function (v) { return nf(v, 2); }, better: "high", eps: 0.005, bar: true });
+        rows.push({ label: t("rExp"), sub: t("rExpSub"), a: sa.exp, b: sb.exp, fmt: function (v) { return nf(v, 2); }, better: "high", eps: 0.005, bar: true });
+        rows.push({ label: t("rOver"), sub: t("rOverSub"), a: sa.over, b: sb.over, fmt: function (v) { return sgn(v, 2); }, better: "high", eps: 0.005 });
+        rows.push({ label: t("rAgf"), sub: t("rAgfSub"), a: sa.agf, b: sb.agf, fmt: function (v) { return nf(v, 2); }, better: "high", eps: 0.005, bar: true });
+        rows.push({ label: t("rAga"), sub: t("lowerBetter"), a: sa.aga, b: sb.aga, fmt: function (v) { return nf(v, 2); }, better: "low", eps: 0.005, bar: true });
+        rows.push({ label: t("rAgd"), a: sa.agd, b: sb.agd, fmt: function (v) { return sgn(v, 2); }, better: "high", eps: 0.005 });
+      } else {
+        rows.push({ label: t("rPpg"), a: sa.ppg, b: sb.ppg, fmt: function (v) { return nf(v, 2); }, better: "high", eps: 0.005, bar: true });
+        rows.push({ label: t("rGf"), a: sa.gf, b: sb.gf, fmt: function (v) { return nf(v, 2); }, better: "high", eps: 0.005, bar: true });
+        rows.push({ label: t("rGa"), sub: t("lowerBetter"), a: sa.ga, b: sb.ga, fmt: function (v) { return nf(v, 2); }, better: "low", eps: 0.005, bar: true });
+        rows.push({ label: t("rGd"), a: sa.gd, b: sb.gd, fmt: function (v) { return sgn(v, 2); }, better: "high", eps: 0.005 });
+        rows.push({ label: t("rCs"), a: sa.cs, b: sb.cs, fmt: function (v) { return pct(v); }, better: "high", eps: 0.005, bar: true });
+        rows.push({ label: t("rBt"), a: sa.bt, b: sb.bt, fmt: function (v) { return pct(v); }, bar: true });
+        rows.push({ label: t("rOv"), a: sa.ov, b: sb.ov, fmt: function (v) { return pct(v); }, bar: true });
+      }
+      rows.push({ label: t("rWdl"), a: sa.W + "–" + sa.D + "–" + sa.L, b: sb.W + "–" + sb.D + "–" + sb.L, fmt: function (v) { return v; } });
+    }
+    $("cmpTitle").textContent = adj ? t("cmpAdj") : t("cmpRaw");
+    $("cmpRows").innerHTML = rows.map(rowHTML).join("");
+    var nn = sa && sb ? t("noteBase", { na: sa.n, a: esc(ta.name), nb: sb.n, b: esc(tb.name) }) : t("noteNone");
+    $("cmpNote").innerHTML = nn + (adj ? t("noteAdj", { ref: Math.round(MD.r_ref) }) : t("noteRaw"));
+
+    renderOdds();
+    renderChart();
+    renderForm();
+    renderH2H();
+  }
+
+  // ---------- odds panel
+  var oddsVals = {};
+  var MK = [];
+  function renderOdds() {
+    var ta = T[S.a], tb = T[S.b], sa = cur.sa, sb = cur.sb, adj = S.mode === "adj";
+    $("vH").textContent = t("homeAt", { team: ta.name });
+    $("vA").textContent = t("homeAt", { team: tb.name });
+    ["H", "A", "N"].forEach(function (k) { $("v" + k).setAttribute("aria-pressed", String(S.venue === k)); });
+    var m;
+    if (adj) m = eloModel(ta.r, tb.r, S.venue);
+    else if (sa && sb) m = rawModel(sa, sb, S.venue);
+    if (!m) { $("pred").innerHTML = ""; $("odds").innerHTML = ""; $("xg").innerHTML = '<span class="empty">' + esc(t("noOdds")) + "</span>"; $("scores").innerHTML = ""; $("margin").textContent = ""; $("oddsNote").textContent = ""; return; }
+    var s = summarize(m.P);
+    var best = s.pw >= s.pd && s.pw >= s.pl ? ["w", s.pw, t("wins", { team: ta.name })] : (s.pl >= s.pd ? ["l", s.pl, t("wins", { team: tb.name })] : ["d", s.pd, t("draw")]);
+    var tp = s.top[0];
+    $("pred").innerHTML = '<div class="pt">' + esc(t("predTitle")) + '</div><div class="pk"><span>' + esc(best[2]) + '</span><span class="num">' + pct(best[1], 0) + '</span></div>' +
+      '<div class="ps">' + esc(t("predSub", { s: tp[0] + "–" + tp[1], p: pct(tp[2], 1), a: nf(m.la, 1), b: nf(m.lb, 1) })) + '</div>' +
+      '<div class="pbar" role="img" aria-label="' + esc(t("wins", { team: ta.name }) + " " + pct(s.pw, 0) + ", " + t("draw") + " " + pct(s.pd, 0) + ", " + t("wins", { team: tb.name }) + " " + pct(s.pl, 0)) + '"><i style="flex:' + s.pw.toFixed(4) + ';background:var(--a)"></i><i style="flex:' + s.pd.toFixed(4) + ';background:var(--muted)"></i><i style="flex:' + s.pl.toFixed(4) + ';background:var(--b)"></i></div>' +
+      '<div class="pleg"><span>' + esc(ta.name) + " " + pct(s.pw, 0) + "</span><span>" + esc(t("draw")) + " " + pct(s.pd, 0) + "</span><span>" + esc(tb.name) + " " + pct(s.pl, 0) + "</span></div>" +
+      (best[0] !== "d" ? '<p class="pn">' + esc(t("predNote")) + "</p>" : "");
+    $("xg").innerHTML = '<div class="sa"><b>' + nf(m.la, 2) + "</b>" + esc(t("xgLbl", { team: ta.name })) + '</div><div class="sb"><b>' + nf(m.lb, 2) + "</b>" + esc(t("xgLbl", { team: tb.name })) + "</div>";
+    MK = [
+      { g: t("g1x2"), k: "w", lab: t("wins", { team: ta.name }), p: s.pw },
+      { k: "d", lab: t("draw"), p: s.pd },
+      { k: "l", lab: t("wins", { team: tb.name }), p: s.pl },
+      { g: t("gGoals"), k: "o", lab: t("over"), p: s.over },
+      { k: "u", lab: t("under"), p: s.under },
+      { g: t("gBtts"), k: "y", lab: t("yes"), p: s.bty },
+      { k: "n", lab: t("no"), p: s.btn }
+    ];
+    var h = "<thead><tr><th>" + esc(t("thOutcome")) + "</th><th>" + esc(t("thModel")) + "</th><th>" + esc(t("thFair")) + "</th><th>" + esc(t("thOdds")) + "</th><th>" + esc(t("thEdge")) + "</th></tr></thead><tbody>";
+    MK.forEach(function (x) {
+      if (x.g) h += '<tr class="grp"><td colspan="5">' + esc(x.g) + "</td></tr>";
+      h += "<tr><td>" + esc(x.lab) + "</td><td>" + pct(x.p, 1) + "</td><td>" + nf(1 / x.p, 2) + '</td><td><input type="text" inputmode="decimal" id="od_' + x.k + '" placeholder="–" aria-label="' + esc(t("oddsAria", { o: x.lab })) + '" value="' + esc(oddsVals[x.k] || "") + '"></td><td class="ev" id="ev_' + x.k + '">–</td></tr>';
+    });
+    $("odds").innerHTML = h + "</tbody>";
+    MK.forEach(function (x) {
+      $("od_" + x.k).addEventListener("input", function (e) { oddsVals[x.k] = e.target.value; updateEdges(); });
+    });
+    $("scores").innerHTML = '<span class="legend-l" style="align-self:center;margin-right:4px">' + esc(t("scoresLbl")) + "</span>" + s.top.map(function (tp) { return '<span class="chip">' + tp[0] + "–" + tp[1] + " · " + pct(tp[2], 1) + "</span>"; }).join("");
+    $("oddsNote").innerHTML = adj ? esc(t("oddsNoteAdj", { a: ta.name })).replace(/&amp;/g, "&amp;") : esc(t("oddsNoteRaw"));
+    updateEdges();
+  }
+  function parseOdds(v) { var x = parseFloat(String(v || "").replace(",", ".")); return x > 1 ? x : null; }
+  function updateEdges() {
+    var tri = [];
+    MK.forEach(function (x) {
+      var o = parseOdds(oddsVals[x.k]), el = $("ev_" + x.k);
+      if (!el) return;
+      if (!o) { el.textContent = "–"; el.className = "ev"; el.removeAttribute("title"); return; }
+      var ev = x.p * o - 1;
+      var tag = ev >= 0.03 ? " ▲" : (ev <= -0.03 ? " ▼" : "");
+      el.textContent = sgn(ev * 100, 1) + " %" + tag;
+      el.className = "ev " + (ev >= 0.03 ? "pos" : (ev <= -0.03 ? "neg" : ""));
+      el.title = ev >= 0.03 ? t("evPos") : (ev <= -0.03 ? t("evNeg") : t("evFair"));
+    });
+    ["w", "d", "l"].forEach(function (k) { var o = parseOdds(oddsVals[k]); if (o) tri.push(1 / o); });
+    $("margin").textContent = tri.length === 3 ? t("marginTxt", { x: nf((tri[0] + tri[1] + tri[2] - 1) * 100, 1) }) : t("marginHint");
+  }
+
+  // ---------- chart
+  var SS = D.meta.series_start.split("-").map(Number);
+  function monthLabel(i) { var tt = SS[1] - 1 + i; return MONTHS[L][tt % 12] + " " + (SS[0] + Math.floor(tt / 12)); }
+  var CH = { W: 720, H: 260, l: 46, r: 96, t: 14, b: 26 };
+  var chartCtx = null;
+  function renderChart() {
+    var bw = $("chartbox").clientWidth || 720;
+    CH.W = Math.max(300, bw);
+    var narrow = CH.W < 520;
+    CH.H = narrow ? 230 : 260; CH.r = narrow ? 48 : 132; CH.l = narrow ? 38 : 46;
+    $("chart").setAttribute("viewBox", "0 0 " + CH.W + " " + CH.H);
+    var pa = prof[S.a], pb = prof[S.b], ta = T[S.a], tb = T[S.b];
+    var n = pa.s.length;
+    var vals = pa.s.concat(pb.s).filter(function (v) { return v != null; });
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    var step = hi - lo > 400 ? 100 : 50;
+    lo = Math.floor((lo - 10) / step) * step; hi = Math.ceil((hi + 10) / step) * step;
+    function X(i) { return CH.l + (CH.W - CH.l - CH.r) * i / (n - 1); }
+    function Y(v) { return CH.t + (CH.H - CH.t - CH.b) * (1 - (v - lo) / (hi - lo)); }
+    var g = "", v;
+    for (v = lo; v <= hi; v += step) g += '<line x1="' + CH.l + '" x2="' + (CH.W - CH.r) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="var(--grid)" stroke-width="1"/><text x="' + (CH.l - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end">' + v + "</text>";
+    for (var i = 0; i < n; i++) {
+      var tt = SS[1] - 1 + i;
+      if (tt % 12 === 0) g += '<text x="' + X(i) + '" y="' + (CH.H - 6) + '" text-anchor="middle">' + (SS[0] + tt / 12) + "</text>";
+    }
+    function path(arr, color) {
+      var d = "", started = false;
+      arr.forEach(function (val, k) { if (val == null) return; d += (started ? "L" : "M") + X(k).toFixed(1) + " " + Y(val).toFixed(1); started = true; });
+      return '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>';
+    }
+    function lastIdx(arr) { for (var k = arr.length - 1; k >= 0; k--) if (arr[k] != null) return k; return -1; }
+    var la = lastIdx(pa.s), lb = lastIdx(pb.s);
+    var ya = Y(pa.s[la]), yb = Y(pb.s[lb]);
+    var oa = 0, ob = 0;
+    if (Math.abs(ya - yb) < 15) { var sh = (15 - Math.abs(ya - yb)) / 2; if (ya <= yb) { oa = -sh; ob = sh; } else { oa = sh; ob = -sh; } }
+    function short(s) { return s.length > 12 ? s.slice(0, 11) + "…" : s; }
+    var svg = g + path(pa.s, "var(--a)") + path(pb.s, "var(--b)") +
+      '<circle cx="' + X(la) + '" cy="' + ya + '" r="4.5" fill="var(--a)" stroke="var(--surface)" stroke-width="2"/><circle cx="' + X(lb) + '" cy="' + yb + '" r="4.5" fill="var(--b)" stroke="var(--surface)" stroke-width="2"/>' +
+      '<text class="endl" x="' + (X(la) + 9) + '" y="' + (ya + oa + 4) + '">' + (narrow ? "" : esc(short(ta.name)) + " ") + pa.s[la] + "</text>" +
+      '<text class="endl" x="' + (X(lb) + 9) + '" y="' + (yb + ob + 4) + '">' + (narrow ? "" : esc(short(tb.name)) + " ") + pb.s[lb] + "</text>" +
+      '<line id="cross" x1="0" x2="0" y1="' + CH.t + '" y2="' + (CH.H - CH.b) + '" stroke="var(--ink2)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>';
+    $("chart").innerHTML = svg;
+    $("legend").innerHTML = '<span style="--c:var(--a)">' + esc(ta.name) + '</span><span style="--c:var(--b)">' + esc(tb.name) + "</span>";
+    chartCtx = { pa: pa, pb: pb, ta: ta, tb: tb, n: n, X: X, Y: Y };
+    var th = "<thead><tr><th>" + esc(t("thDate")) + "</th><th>" + esc(ta.name) + "</th><th>" + esc(tb.name) + "</th></tr></thead><tbody>";
+    for (var k = n - 1; k >= 0; k -= 6) th += "<tr><td>" + monthLabel(k) + "</td><td>" + (pa.s[k] == null ? "–" : pa.s[k]) + "</td><td>" + (pb.s[k] == null ? "–" : pb.s[k]) + "</td></tr>";
+    $("eloTbl").innerHTML = th + "</tbody>";
+  }
+  (function bindChart() {
+    var svgEl = $("chart"), tip = $("tip"), box = $("chartbox");
+    function move(ev) {
+      if (!chartCtx) return;
+      var r = svgEl.getBoundingClientRect();
+      var px = (ev.clientX - r.left) / r.width * CH.W;
+      var c = chartCtx;
+      var i = Math.round((px - CH.l) / (CH.W - CH.l - CH.r) * (c.n - 1));
+      if (i < 0 || i > c.n - 1) { leave(); return; }
+      var cross = $("cross");
+      cross.setAttribute("x1", c.X(i)); cross.setAttribute("x2", c.X(i)); cross.setAttribute("visibility", "visible");
+      tip.innerHTML = "<div>" + monthLabel(i) + '</div><div><span class="k" style="background:var(--a)"></span>' + esc(c.ta.name) + " " + (c.pa.s[i] == null ? "–" : c.pa.s[i]) + '</div><div><span class="k" style="background:var(--b)"></span>' + esc(c.tb.name) + " " + (c.pb.s[i] == null ? "–" : c.pb.s[i]) + "</div>";
+      tip.hidden = false;
+      var bx = box.getBoundingClientRect();
+      var left = ev.clientX - bx.left + 14;
+      if (left + tip.offsetWidth > bx.width) left = ev.clientX - bx.left - tip.offsetWidth - 14;
+      tip.style.left = Math.max(0, left) + "px";
+      tip.style.top = "8px";
+    }
+    function leave() { tip.hidden = true; var cr = $("cross"); if (cr) cr.setAttribute("visibility", "hidden"); }
+    svgEl.addEventListener("pointermove", move);
+    svgEl.addEventListener("pointerleave", leave);
+  })();
+
+  // ---------- form + h2h
+  function formHTML(idx, cls, ms) {
+    var tm = T[idx];
+    var last = ms.slice(-10);
+    var h = '<div class="formrow" style="--c:var(' + (cls === "a" ? "--a" : "--b") + ')"><div class="who">' + esc(tm.name) + "</div>";
+    if (!last.length) return h + '<span class="empty">' + esc(t("noMatches")) + "</span></div>";
+    h += '<div class="chips">' + last.map(function (m) {
+      var r = m[4] > m[5] ? "W" : (m[4] === m[5] ? "D" : "L");
+      var venue = m[2] === 1 ? t("vHome") : (m[2] === 0 ? t("vAway") : t("vNeutral"));
+      var ttl = dmy(m[0]) + " " + compLabel(m[1]) + " (" + venue + ") " + t("vsWord") + " " + T[m[3]].name + " " + m[4] + "–" + m[5];
+      return '<span class="fc ' + r + '" title="' + esc(ttl) + '">' + t("f" + r) + "</span>";
+    }).join("") + "</div>";
+    var lm = last[last.length - 1];
+    h += '<div class="num" style="font-size:0.78rem;color:var(--ink2)">' + esc(t("lastLbl", { d: dmy(lm[0]), o: T[lm[3]].name, s: lm[4] + "–" + lm[5] })) + "</div>";
+    return h + "</div>";
+  }
+  function renderForm() {
+    $("form").innerHTML = formHTML(S.a, "a", cur.wa) + formHTML(S.b, "b", cur.wb) + '<p class="note">' + esc(t("formNote")) + "</p>";
+  }
+  function renderH2H() {
+    var ta = T[S.a], tb = T[S.b];
+    var ms = D.h2h.filter(function (m) { return (m[1] === S.a && m[2] === S.b) || (m[1] === S.b && m[2] === S.a); });
+    if (!ms.length) { $("h2h").innerHTML = '<p class="empty">' + esc(t("h2hEmpty")) + "</p>"; return; }
+    var w = 0, d = 0, l = 0, gf = 0, ga = 0;
+    ms.forEach(function (m) {
+      var aHome = m[1] === S.a, f = aHome ? m[3] : m[4], a = aHome ? m[4] : m[3];
+      gf += f; ga += a; if (f > a) w++; else if (f === a) d++; else l++;
+    });
+    var sum = t("h2hSum", { a: esc(ta.name), b: esc(tb.name), w: w, wl: w === 1 ? t("winOne") : t("winMany"), d: d, l: l, ll: l === 1 ? t("winOne") : t("winMany"), gf: gf, ga: ga, n: ms.length });
+    var h = '<div class="h2h-sum">' + sum + "</div>";
+    h += '<div class="tbl h2h"><table><thead><tr><th>' + esc(t("thDate")) + "</th><th>" + esc(t("thComp")) + "</th><th>" + esc(t("thMatch")) + "</th></tr></thead><tbody>";
+    ms.slice(-8).reverse().forEach(function (m) {
+      h += "<tr><td>" + dmy(m[0]) + "</td><td>" + compLabel(m[5]) + '</td><td style="font-family:var(--font-ui)">' + esc(T[m[1]].name) + ' <b class="num">' + m[3] + "–" + m[4] + "</b> " + esc(T[m[2]].name) + "</td></tr>";
+    });
+    $("h2h").innerHTML = h + "</tbody></table></div>";
+  }
+
+  // ---------- static copy
+  function mean(c) { var a = sel.filter(function (i) { return T[i].c === c; }).map(function (i) { return T[i].r; }); return a.reduce(function (x, y) { return x + y; }, 0) / a.length; }
+  function renderCopy() {
+    var bt = D.meta.backtest;
+    $("fresh").textContent = t("fresh", { a: dlong(D.meta.data_end), b: dlong(D.meta.last.CL) });
+    var v = { hfa: MD.hfa, kd: MD.K_dom, ke: MD.K_eur, m1: Math.round(mean("ENG")), m2: Math.round(mean("ESP")), m3: Math.round(mean("GER")), m4: Math.round(mean("ITA")), m5: Math.round(mean("FRA")),
+              n: bt.n.toLocaleString(LOC[L]), imp: nf((1 - bt.ll_model / bt.ll_base) * 100, 1), acc: nf(bt.acc * 100, 1), accH: nf(bt.acc_home * 100, 1), date: dlong(D.meta.data_end) };
+    $("discBody").innerHTML = ["d1", "d2", "d3", "d4", "d5"].map(function (k) { return "<p>" + t(k) + "</p>"; }).join("");
+    $("howto").innerHTML = ["h1", "h2", "h3", "h4", "h5", "h6"].map(function (k) { return "<p>" + t(k, v) + "</p>"; }).join("");
+  }
+  function applyStatic() {
+    document.documentElement.lang = L;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-i18n]"), function (el) { el.textContent = t(el.getAttribute("data-i18n")); });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-i18n-aria]"), function (el) { el.setAttribute("aria-label", t(el.getAttribute("data-i18n-aria"))); });
+    Array.prototype.forEach.call($("win").options, function (o) { o.textContent = t("nMatches", { n: o.value }); });
+  }
+
+  // ---------- wire up
+  function fullRender() {
+    applyStatic();
+    fillLeague($("lgA")); fillLeague($("lgB"));
+    syncPick("A"); syncPick("B");
+    renderCopy();
+    renderAll();
+  }
+  $("lang").value = L;
+  $("lang").addEventListener("change", function () {
+    L = this.value;
+    try { localStorage.setItem("elo-h2h-lang", L); } catch (e) {}
+    fullRender();
+  });
+  function setPressed(ids, on) { ids.forEach(function (id) { $(id).setAttribute("aria-pressed", String(id === on)); }); }
+  $("lgA").addEventListener("change", function () { S.a = strongest(this.value); syncPick("A"); oddsVals = {}; persist(); renderAll(); });
+  $("lgB").addEventListener("change", function () { S.b = strongest(this.value); syncPick("B"); oddsVals = {}; persist(); renderAll(); });
+  $("selA").addEventListener("change", function () { S.a = +this.value; oddsVals = {}; persist(); renderAll(); });
+  $("selB").addEventListener("change", function () { S.b = +this.value; oddsVals = {}; persist(); renderAll(); });
+  $("swap").addEventListener("click", function () { var tmp = S.a; S.a = S.b; S.b = tmp; syncPick("A"); syncPick("B"); oddsVals = {}; persist(); renderAll(); });
+  $("mAdj").addEventListener("click", function () { S.mode = "adj"; setPressed(["mAdj", "mRaw"], "mAdj"); renderAll(); });
+  $("mRaw").addEventListener("click", function () { S.mode = "raw"; setPressed(["mAdj", "mRaw"], "mRaw"); renderAll(); });
+  $("win").addEventListener("change", function () { S.win = +this.value; renderAll(); });
+  $("cmp").addEventListener("change", function () { S.comp = this.value; renderAll(); });
+  ["H", "A", "N"].forEach(function (k) { $("v" + k).addEventListener("click", function () { S.venue = k; oddsVals = {}; renderAll(); }); });
+  var rt;
+  window.addEventListener("resize", function () { clearTimeout(rt); rt = setTimeout(renderChart, 150); });
+  fullRender();
+})();
+
+</script>
