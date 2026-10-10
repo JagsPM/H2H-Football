@@ -1,0 +1,12 @@
+data/
+site/
+matches_raw.json
+matches_canon.json
+teams.json
+elo_out.json
+backtest.json
+data.json
+index.html
+elo-head-to-head.html
+known_teams.new.json
+__pycache__/
